@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="课表">
+<title>课表</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+  :root{
+    --bg:#0b1120; --panel:#111c30; --panel2:#16233a; --line:#22304a;
+    --text:#e8edf6; --muted:#8fa3c0; --accent:#3b82f6; --danger:#e5484d;
+    --radius:14px;
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    overscroll-behavior-y:none;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+  /* ── 顶栏 ── */
+  header{
+    position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;
+    padding:14px 16px 10px;background:linear-gradient(180deg,var(--bg) 70%,rgba(11,17,32,.86));
+    backdrop-filter:blur(8px);
+  }
+  .title{font-size:20px;font-weight:700;letter-spacing:.01em}
+  .title small{display:block;font-size:11.5px;font-weight:400;color:var(--muted);letter-spacing:.02em}
+  .grow{flex:1}
+  .icon-btn{
+    width:40px;height:40px;border-radius:12px;background:var(--panel);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:17px;
+  }
+  .icon-btn:active{background:var(--panel2)}
+  .add-btn{background:var(--accent);border-color:var(--accent);color:#fff;font-size:22px;font-weight:300}
+
+  /* ── 星期条 ── */
+  nav.days{display:flex;gap:6px;padding:4px 12px 10px;overflow-x:auto;scrollbar-width:none}
+  nav.days::-webkit-scrollbar{display:none}
+  .day-chip{
+    flex:0 0 auto;padding:7px 13px;border-radius:999px;background:var(--panel);
+    border:1px solid var(--line);color:var(--muted);font-size:13px;white-space:nowrap;
+  }
+  .day-chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .day-chip.today{box-shadow:inset 0 0 0 1px rgba(59,130,246,.6)}
+
+  /* ── 日视图 ── */
+  .day-grid{
+    display:grid;grid-template-columns:52px 1fr;gap:1px;
+    margin:0 12px 24px;background:var(--line);border:1px solid var(--line);
+    border-radius:var(--radius);overflow:hidden;
+  }
+  .cell{background:var(--panel);min-height:52px;position:relative}
+  .cell.slot{cursor:pointer}
+  .cell.slot:active{background:var(--panel2)}
+  .tcell{
+    background:var(--panel2);display:flex;flex-direction:column;align-items:center;
+    padding-top:5px;font-size:10.5px;color:var(--muted);
+  }
+  .tcell b{font-size:11px;color:#b9c8dd;font-weight:600}
+  .course{
+    margin:2px;border-radius:10px;padding:6px 8px;color:#fff;overflow:hidden;
+    display:flex;flex-direction:column;gap:2px;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.35);
+  }
+  .course .n{font-size:13px;font-weight:600;line-height:1.25;word-break:break-all}
+  .course .m{font-size:11px;opacity:.92;line-height:1.35;word-break:break-all}
+
+  /* ── 周视图 ── */
+  .week-scroll{margin:0 0 24px;overflow-x:auto;padding:0 12px}
+  .week{display:grid;min-width:620px;gap:2px}
+  .week .whead{
+    background:var(--panel2);border-radius:8px;text-align:center;font-size:11px;
+    padding:6px 0;color:var(--muted)
+  }
+  .week .whead.on{background:var(--accent);color:#fff}
+  .wcell{background:var(--panel);border-radius:6px;min-height:44px;position:relative}
+  .wcourse{
+    border-radius:6px;overflow:hidden;padding:2px 3px;margin:1px;
+    font-size:9.5px;line-height:1.15;color:#fff;word-break:break-all;
+  }
+  .wtime{font-size:9px;color:var(--muted);text-align:right;padding:3px 4px 0 0}
+
+  /* ── 底部/空状态 ── */
+  .empty{margin:6px 12px 24px;padding:22px;border:1px dashed var(--line);border-radius:var(--radius);
+    color:var(--muted);font-size:13px;text-align:center;line-height:1.8}
+  footer{padding:0 16px calc(24px + env(safe-area-inset-bottom));color:var(--muted);font-size:11.5px;display:flex;gap:14px;flex-wrap:wrap}
+  footer button{color:var(--muted);text-decoration:underline;text-underline-offset:2px;padding:6px 0}
+
+  /* ── 弹层 ── */
+  .overlay{position:fixed;inset:0;background:rgba(3,7,18,.66);z-index:50;display:none;align-items:flex-end;justify-content:center}
+  .overlay.on{display:flex}
+  .sheet{
+    width:100%;max-width:560px;max-height:92vh;overflow:auto;background:var(--panel);
+    border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+    display:flex;flex-direction:column;gap:13px;animation:up .22s ease-out;
+  }
+  @keyframes up{from{transform:translateY(18px);opacity:.6}to{transform:none;opacity:1}}
+  .sheet h3{margin:0;font-size:16px;font-weight:700;display:flex;align-items:center}
+  .sheet h3 .grow{flex:1}
+  .x{width:32px;height:32px;border-radius:10px;background:var(--panel2);color:var(--muted);font-size:16px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:12px;color:var(--muted);font-weight:600}
+  input,select{
+    width:100%;font:inherit;font-size:16px;padding:12px;border-radius:12px;
+    background:var(--panel2);border:1px solid var(--line);color:var(--text);outline:none;
+    appearance:none;
+  }
+  input:focus,select:focus{border-color:var(--accent)}
+  .row{display:flex;gap:10px}
+  .row .field{flex:1}
+  .swatches{display:flex;gap:9px;flex-wrap:wrap}
+  .sw{width:34px;height:34px;border-radius:10px;border:2px solid transparent}
+  .sw.on{border-color:#fff;box-shadow:0 0 0 2px var(--panel) inset}
+  .hint{font-size:12px;color:var(--muted)}
+  .warn{font-size:12px;color:#f0b429}
+  .err{font-size:12.5px;color:var(--danger)}
+  .sheet-actions{display:flex;gap:10px;margin-top:2px}
+  .btn{
+    flex:1;padding:13px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);
+    font-size:15px;font-weight:600;text-align:center;
+  }
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.danger{color:var(--danger);border-color:rgba(229,72,77,.5);flex:0 0 auto;padding-inline:16px}
+  .menu-item{
+    display:flex;align-items:center;justify-content:space-between;padding:14px 4px;
+    border-bottom:1px solid var(--line);font-size:14.5px;
+  }
+  .menu-item:last-child{border-bottom:0}
+  .toast{
+    position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom));transform:translateX(-50%);
+    background:#1e293b;color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;z-index:80;
+    opacity:0;pointer-events:none;transition:opacity .2s
+  }
+  .toast.on{opacity:1}
+  .warnbar{
+    position:sticky;top:0;z-index:30;background:#7c2d12;color:#fed7aa;
+    padding:9px 14px;font-size:12px;line-height:1.5;border-bottom:1px solid #9a3412;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">课表<small id="subtitle">—</small></div>
+  <div class="grow"></div>
+  <button class="icon-btn" id="viewBtn" aria-label="切换视图">周</button>
+  <button class="icon-btn" id="menuBtn" aria-label="更多">⋯</button>
+  <button class="icon-btn add-btn" id="addBtn" aria-label="添加课程">+</button>
+</header>
+
+<nav class="days" id="days"></nav>
+<main id="main"></main>
+<footer>
+  <span id="stat"></span>
+  <span class="grow"></span>
+</footer>
+
+<div class="overlay" id="overlay"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="fileInput" accept="application/json,.json" hidden>
+
+<script>
+(function () {
+  'use strict'
+
+  var KEY = 'dsh-timetable:courses:v2'
+  var START = 8
+  var END = 22
+  var DAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+  var COLORS = ['#e8590c', '#2f9e44', '#1971c2', '#9c36b5', '#e03131', '#f08c00', '#0c8599', '#5f3dc4']
+
+  var courses = []
+  var ui = { day: todayIndex(), view: 'day' }
+
+  var $ = function (sel) { return document.querySelector(sel) }
+
+  function todayIndex() {
+    var d = new Date().getDay()
+    return d === 0 ? 6 : d - 1
+  }
+
+  function pad(n) { return (n < 10 ? '0' : '') + n }
+  function hhmm(h) { return pad(h) + ':00' }
+  function range(a, b) { return hhmm(a) + '–' + hhmm(b) }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    })
+  }
+
+  /* ── 数据 ───────────────────────────────────────────── */
+  function clampHour(v, min, max) {
+    var n = Math.round(Number(v))
+    if (!isFinite(n)) return min
+    return Math.min(max, Math.max(min, n))
+  }
+
+  function normalize(start, end) {
+    var s = clampHour(start, START, END - 1)
+    var e = clampHour(end, START + 1, END)
+    if (e <= s) e = Math.min(END, s + 2)
+    if (e <= s) s = Math.max(START, e - 1)
+    return [s, e]
+  }
+
+  function sanitize(raw) {
+    if (!raw || typeof raw !== 'object') return null
+    var r = normalize(raw.start, raw.end)
+    var day = Math.round(Number(raw.day))
+    if (!isFinite(day) || day < 0 || day > 6) day = 0
+    var color = /^#[0-9a-fA-F]{6}$/.test(raw.color || '') ? raw.color : COLORS[0]
+    return {
+      id: typeof raw.id === 'string' && raw.id ? raw.id : 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: String(raw.name || '').trim().slice(0, 60),
+      place: String(raw.place || '').trim().slice(0, 40),
+      teacher: String(raw.teacher || '').trim().slice(0, 30),
+      day: day, start: r[0], end: r[1], color: color
+    }
+  }
+
+  function load() {
+    try {
+      var text = localStorage.getItem(KEY)
+      if (!text) return []
+      var arr = JSON.parse(text)
+      if (!Array.isArray(arr)) return []
+      return arr.map(sanitize).filter(Boolean)
+    } catch (e) { return [] }
+  }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(courses)) } catch (e) { toast('保存失败：存储空间不足') }
+  }
+
+  function toast(msg) {
+    var el = $('#toast')
+    el.textContent = msg
+    el.classList.add('on')
+    clearTimeout(toast._t)
+    toast._t = setTimeout(function () { el.classList.remove('on') }, 1800)
+  }
+
+  /* ── 渲染 ───────────────────────────────────────────── */
+  function render() {
+    renderDays()
+    $('#viewBtn').textContent = ui.view === 'day' ? '周' : '日'
+    $('#subtitle').textContent = ui.view === 'day'
+      ? DAYS[ui.day] + ' · ' + range(START, END)
+      : '本周 · ' + courses.length + ' 门课'
+    $('#main').innerHTML = ui.view === 'day' ? dayView() : weekView()
+    $('#stat').textContent = courses.length ? '共 ' + courses.length + ' 门课程 · 数据存在本机' : '还没有课程，点右上角 + 添加'
+  }
+
+  function renderDays() {
+    var today = todayIndex()
+    $('#days').innerHTML = DAYS.map(function (label, i) {
+      var cls = 'day-chip' + (i === ui.day ? ' on' : '') + (i === today ? ' today' : '')
+      return '<button class="' + cls + '" data-day="' + i + '">' + label + '</button>'
+    }).join('')
+  }
+
+  function dayView() {
+    var rows = []
+    var dayCourses = courses.filter(function (c) { return c.day === ui.day })
+
+    for (var hr = START; hr < END; hr++) {
+      rows.push('<div class="cell tcell" style="grid-row:' + (hr - START + 1) + '"><b>' + hr + '</b>' + hhmm(hr) + '</div>')
+      rows.push('<div class="cell slot" data-slot="' + hr + '" style="grid-row:' + (hr - START + 1) + '"></div>')
+    }
+
+    dayCourses.forEach(function (c) {
+      var span = Math.max(1, c.end - c.start)
+      rows.push(
+        '<div class="course" data-id="' + esc(c.id) + '" style="grid-column:2;grid-row:' + (c.start - START + 1) + ' / span ' + span + ';background:' + c.color + '">' +
+          '<div class="n">' + esc(c.name) + '</div>' +
+          '<div class="m">' + range(c.start, c.end) + '</div>' +
+          (c.place ? '<div class="m">📍 ' + esc(c.place) + '</div>' : '') +
+          (c.teacher ? '<div class="m">👤 ' + esc(c.teacher) + '</div>' : '') +
+        '</div>'
+      )
+    })
+
+    var empty = dayCourses.length ? '' :
+      '<div class="empty">' + DAYS[ui.day] + ' 还没有课<br>点下面的空格，或右上角「+」添加</div>'
+
+    return '<div class="day-grid" style="grid-template-rows:repeat(' + (END - START) + ',52px)">' + rows.join('') + '</div>' + empty
+  }
+
+  function weekView() {
+    var today = todayIndex()
+    var head = '<div></div>' + DAYS.map(function (d, i) {
+      return '<div class="whead' + (i === ui.day ? ' on' : '') + '" data-day="' + i + '">' + d.replace('周', '') + '</div>'
+    }).join('')
+
+    var body = []
+    for (var hr = START; hr < END; hr++) {
+      body.push('<div class="wtime">' + hr + '</div>')
+      for (var d = 0; d < 7; d++) body.push('<div class="wcell" data-slot="' + hr + '" data-day="' + d + '"></div>')
+    }
+
+    var grid = '<div class="week" style="grid-template-columns:26px repeat(7,1fr);grid-template-rows:22px repeat(' + (END - START) + ',44px)">' + head + body.join('') + '</div>'
+
+    var blocks = courses.map(function (c) {
+      var col = c.day + 2
+      var row = c.start - START + 2
+      var span = Math.max(1, c.end - c.start)
+      return '<div class="wcourse" data-id="' + esc(c.id) + '" style="grid-column:' + col + ';grid-row:' + row + ' / span ' + span + ';background:' + c.color + '">' + esc(c.name) + '</div>'
+    }).join('')
+
+    return '<div class="week-scroll"><div class="week" style="grid-template-columns:26px repeat(7,1fr);grid-template-rows:22px repeat(' + (END - START) + ',44px);position:relative">' +
+      head + body.join('') + blocks + '</div></div>'
+  }
+
+  /* ── 编辑器 ─────────────────────────────────────────── */
+  var editing = null
+
+  function openEditor(course, prefill) {
+    editing = course ? { id: course.id, isNew: false, data: course }
+      : { id: null, isNew: true, data: null }
+
+    var d = course || {
+      name: '', place: '', teacher: '',
+      day: prefill && typeof prefill.day === 'number' ? prefill.day : ui.day,
+      start: prefill && prefill.start ? prefill.start : START,
+      end: (prefill && prefill.start ? prefill.start : START) + 2,
+      color: COLORS[0]
+    }
+    if (d.end > END) d.end = END
+
+    var hourOptions = function (from, to, sel) {
+      var out = ''
+      for (var i = from; i <= to; i++) out += '<option value="' + i + '"' + (i === sel ? ' selected' : '') + '>' + hhmm(i) + '</option>'
+      return out
+    }
+
+    $('#sheet').innerHTML =
+      '<h3>' + (course ? '编辑课程' : '添加课程') + '<span class="grow"></span><button class="x" data-close>✕</button></h3>' +
+      '<div class="field"><label>课程名称 *</label><input id="fName" maxlength="60" placeholder="例如：高等数学" value="' + esc(d.name) + '"></div>' +
+      '<div class="row">' +
+        '<div class="field"><label>老师</label><input id="fTeacher" maxlength="30" placeholder="选填" value="' + esc(d.teacher) + '"></div>' +
+        '<div class="field"><label>地点</label><input id="fPlace" maxlength="40" placeholder="选填" value="' + esc(d.place) + '"></div>' +
+      '</div>' +
+      '<div class="row">' +
+        '<div class="field"><label>星期</label><select id="fDay">' +
+          DAYS.map(function (x, i) { return '<option value="' + i + '"' + (i === d.day ? ' selected' : '') + '>' + x + '</option>' }).join('') +
+        '</select></div>' +
+        '<div class="field"><label>开始</label><select id="fStart">' + hourOptions(START, END - 1, d.start) + '</select></div>' +
+        '<div class="field"><label>结束</label><select id="fEnd">' + hourOptions(START + 1, END, d.end) + '</select></div>' +
+      '</div>' +
+      '<div class="hint" id="dur"></div>' +
+      '<div class="warn" id="conf" hidden></div>' +
+      '<div class="field"><label>颜色</label><div class="swatches" id="swatches">' +
+        COLORS.map(function (c) {
+          return '<button class="sw' + (c === d.color ? ' on' : '') + '" data-color="' + c + '" style="background:' + c + '"></button>'
+        }).join('') +
+      '</div></div>' +
+      '<div class="err" id="err" hidden></div>' +
+      '<div class="sheet-actions">' +
+        (course ? '<button class="btn danger" data-del>删除</button>' : '') +
+        '<button class="btn" data-close>取消</button>' +
+        '<button class="btn primary" data-save>保存</button>' +
+      '</div>'
+
+    editing.color = d.color
+    bindEditor(d)
+    $('#overlay').classList.add('on')
+    setTimeout(function () { var n = $('#fName'); if (n) { n.focus(); n.select() } }, 60)
+  }
+
+  function currentEditorValues() {
+    return {
+      name: $('#fName').value.trim(),
+      teacher: $('#fTeacher').value.trim(),
+      place: $('#fPlace').value.trim(),
+      day: Number($('#fDay').value),
+      start: Number($('#fStart').value),
+      end: Number($('#fEnd').value),
+      color: editing.color
+    }
+  }
+
+  function refreshEditorMeta() {
+    var v = currentEditorValues()
+    var dur = Math.max(0, v.end - v.start)
+    $('#dur').textContent = '时长 ' + dur + ' 小时（' + range(v.start, v.end) + '）'
+    var clash = courses.filter(function (c) {
+      return c.id !== editing.id && c.day === v.day && c.start < v.end && c.end > v.start
+    })
+    var conf = $('#conf')
+    if (clash.length) {
+      conf.hidden = false
+      conf.textContent = '注意：与「' + clash.map(function (c) { return c.name }).join('、') + '」时间重叠'
+    } else {
+      conf.hidden = true
+    }
+  }
+
+  function bindEditor() {
+    ;['#fDay', '#fStart', '#fEnd'].forEach(function (sel) {
+      var el = $(sel)
+      if (el) el.addEventListener('change', function () {
+        if ($('#fEnd').value <= $('#fStart').value) {
+          $('#fEnd').value = String(Math.min(END, Number($('#fStart').value) + 2))
+        }
+        refreshEditorMeta()
+      })
+    })
+    var sw = $('#swatches')
+    if (sw) sw.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-color]')
+      if (!b) return
+      editing.color = b.getAttribute('data-color')
+      Array.prototype.forEach.call(sw.children, function (x) { x.classList.toggle('on', x === b) })
+    })
+    refreshEditorMeta()
+  }
+
+  function saveEditor() {
+    var v = currentEditorValues()
+    v.id = editing.id
+    var err = $('#err')
+    if (!v.name) { err.hidden = false; err.textContent = '请填写课程名称'; return }
+    if (v.end <= v.start) { err.hidden = false; err.textContent = '结束时间要晚于开始时间'; return }
+
+    if (editing.isNew) {
+      courses.push(sanitize(v))
+    } else {
+      courses = courses.map(function (c) { return c.id === editing.id ? sanitize(v) : c })
+    }
+    save()
+    closeOverlay()
+    render()
+    toast('已保存')
+  }
+
+  function deleteEditor() {
+    if (!editing) return
+    if (!confirm('删除这门课程？')) return
+    courses = courses.filter(function (c) { return c.id !== editing.id })
+    save()
+    closeOverlay()
+    render()
+    toast('已删除')
+  }
+
+  function closeOverlay() {
+    $('#overlay').classList.remove('on')
+    $('#sheet').innerHTML = ''
+    editing = null
+  }
+
+  /* ── 菜单 ───────────────────────────────────────────── */
+  function openMenu() {
+    $('#sheet').innerHTML =
+      '<h3>更多<span class="grow"></span><button class="x" data-close>✕</button></h3>' +
+      '<button class="menu-item" data-export>导出数据（JSON）<span>›</span></button>' +
+      '<button class="menu-item" data-import>导入数据<span>›</span></button>' +
+      '<button class="menu-item" data-clear style="color:var(--danger)">清空全部课程<span>›</span></button>' +
+      '<div class="hint">数据保存在本机浏览器；换设备或清缓存前先导出备份。</div>'
+    $('#overlay').classList.add('on')
+  }
+
+  function exportData() {
+    var blob = new Blob([JSON.stringify(courses, null, 2)], { type: 'application/json' })
+    var a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'timetable-' + new Date().toISOString().slice(0, 10) + '.json'
+    a.click()
+    setTimeout(function () { URL.revokeObjectURL(a.href) }, 2000)
+    toast('已导出')
+  }
+
+  function importData(file) {
+    var reader = new FileReader()
+    reader.onload = function () {
+      try {
+        var arr = JSON.parse(String(reader.result))
+        if (!Array.isArray(arr)) throw new Error('格式不对')
+        courses = arr.map(sanitize).filter(Boolean)
+        save()
+        closeOverlay()
+        render()
+        toast('已导入 ' + courses.length + ' 门课程')
+      } catch (e) {
+        toast('导入失败：' + e.message)
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  /* ── 事件 ───────────────────────────────────────────── */
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('button, [data-id], [data-slot], [data-day]')
+    if (!t) return
+
+    if (t.hasAttribute('data-close')) { closeOverlay(); return }
+    if (t.hasAttribute('data-save')) { saveEditor(); return }
+    if (t.hasAttribute('data-del')) { deleteEditor(); return }
+    if (t.hasAttribute('data-export')) { exportData(); return }
+    if (t.hasAttribute('data-import')) { $('#fileInput').click(); return }
+    if (t.hasAttribute('data-clear')) {
+      if (confirm('清空全部课程？此操作不可恢复。')) {
+        courses = []; save(); closeOverlay(); render(); toast('已清空')
+      }
+      return
+    }
+
+    if (t.id === 'addBtn') { openEditor(null, { day: ui.day, start: START }); return }
+    if (t.id === 'menuBtn') { openMenu(); return }
+    if (t.id === 'viewBtn') { ui.view = ui.view === 'day' ? 'week' : 'day'; render(); return }
+
+    if (t.hasAttribute('data-day') && !t.hasAttribute('data-slot')) {
+      ui.day = Number(t.getAttribute('data-day'))
+      ui.view = 'day'
+      render()
+      return
+    }
+
+    if (t.hasAttribute('data-slot')) {
+      openEditor(null, {
+        day: Number(t.getAttribute('data-day') || ui.day),
+        start: Number(t.getAttribute('data-slot'))
+      })
+      return
+    }
+
+    if (t.hasAttribute('data-id')) {
+      var id = t.getAttribute('data-id')
+      var course = courses.filter(function (c) { return c.id === id })[0]
+      if (course) openEditor(course)
+    }
+  })
+
+  $('#overlay').addEventListener('click', function (e) {
+    if (e.target === this) closeOverlay()
+  })
+
+  $('#fileInput').addEventListener('change', function (e) {
+    if (e.target.files && e.target.files[0]) importData(e.target.files[0])
+    e.target.value = ''
+  })
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && $('#overlay').classList.contains('on')) closeOverlay()
+  })
+
+  /* ── 启动 ───────────────────────────────────────────── */
+  function storageAvailable() {
+    try {
+      localStorage.setItem('__tt_probe__', '1')
+      localStorage.removeItem('__tt_probe__')
+      return true
+    } catch (e) { return false }
+  }
+
+  function showStorageWarning() {
+    var bar = document.createElement('div')
+    bar.className = 'warnbar'
+    bar.textContent = '⚠️ 当前打开方式不让浏览器保存数据（常见于直接打开本地 HTML 文件），关掉后课表会丢。请用「⋯ → 导出数据」备份，或改用 https 部署版 / 添加到主屏幕。'
+    document.body.insertBefore(bar, document.body.firstChild)
+  }
+
+  courses = load()
+  render()
+  if (!storageAvailable()) showStorageWarning()
+
+  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {})
+    })
+  }
+})()
+</script>
+</body>
+</html>
